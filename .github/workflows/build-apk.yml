@@ -1,8 +1,5 @@
-name: Build MANOSPY2 APK
-
+name: Build APK
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -10,18 +7,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
       - uses: expo/expo-github-action@v8
         with:
-          eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
-      
-      - run: npm install
-      
-      - run: eas build --platform android --wait
-
+      - run: npm install && eas build --platform android --wait
       - uses: actions/upload-artifact@v3
         with:
-          name: MANOSPY2
+          name: manospy2
           path: "*.apk"
-          retention-days: 30

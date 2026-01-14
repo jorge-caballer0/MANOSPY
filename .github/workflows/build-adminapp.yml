@@ -1,9 +1,5 @@
-name: Build AdminApp APK
-
+name: Build Admin APK
 on:
-  push:
-    branches: [main]
-    paths: [admin-app/**]
   workflow_dispatch:
 
 jobs:
@@ -11,18 +7,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
       - uses: expo/expo-github-action@v8
         with:
-          eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
-      
-      - run: cd admin-app && npm install
-      
-      - run: cd admin-app && eas build --platform android --wait
-
+      - run: cd admin-app && npm install && eas build --platform android --wait
       - uses: actions/upload-artifact@v3
         with:
-          name: AdminApp
+          name: adminapp
           path: "admin-app/*.apk"
-          retention-days: 30
