@@ -1,0 +1,69 @@
+{
+  "professionals": [
+    {
+      "id": 1,
+      "name": "María García",
+      "profession": "Electricista",
+      "rating": 4.8,
+      "location": "Madrid, ES",
+      "categories": ["Electricista"],
+      "avatar": "https://i.pravatar.cc/150?img=12",
+      "bio": "Profesional con 10 años de experiencia en instalaciones y reparaciones eléctricas."
+    }
+  ],
+  "users": [
+    {
+      "id": 1,
+      "name": "Cliente Demo",
+      "email": "cliente@demo.local",
+      "role": "client"
+    },
+    {
+      "id": 2,
+      "name": "Profesional Demo",
+      "email": "pro@demo.local",
+      "role": "professional"
+    }
+  ],
+  "requests": [
+    {
+      "id": 1,
+      "userId": 1,
+      "professionalId": 1,
+      "service": "Reparación de cuadro eléctrico",
+      "status": "pending",
+      "date": "2026-01-20T10:00:00.000Z"
+    }
+  ],
+  "reservations": [
+    {
+      "id": 1,
+      "userId": 1,
+      "professionalId": 1,
+      "date": "2026-01-22T09:00:00.000Z",
+      "status": "confirmed"
+    }
+  ],
+  "conversations": [
+    {
+      "id": 1,
+      "participants": [1,2],
+      "messages": [
+        { "id": 1, "senderId": 2, "text": "Hola, ¿en qué puedo ayudarte?", "timestamp": "2026-01-13T12:00:00.000Z" },
+        { "id": 2, "senderId": 1, "text": "Necesito revisar una instalación eléctrica.", "timestamp": "2026-01-13T12:05:00.000Z" }
+      ]
+    }
+  ],
+  "categories": [
+    "Electricista",
+    "Plomero",
+    "Carpintero",
+    "Pintor",
+    "Jardinería",
+    "Limpieza",
+    "Tintorería",
+    "Cerrajería",
+    "Fontanería",
+    "Aire acondicionado"
+  ]
+}

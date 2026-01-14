@@ -1,0 +1,393 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  Alert,
+  Modal,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { COLORS, SPACING, RADIUS } from '../constants';
+import { Card, Badge, Button } from '../components/CommonComponents';
+
+export default function AdminUsersManagement() {
+  const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterRole, setFilterRole] = useState('all');
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editData, setEditData] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  useEffect(() => {
+    applyFilters();
+  }, [searchQuery, filterRole, users]);
+
+  const loadUsers = async () => {
+    try {
+      const data = await AsyncStorage.getItem('manospy_users_db_v1');
+      if (data) {
+        const usersList = JSON.parse(data);
+        setUsers(usersList);
+        setFilteredUsers(usersList);
+      }
+    } catch (error) {
+      console.error('Error loading users:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const applyFilters = () => {
+    let filtered = users;
+
+    // Filtrar por búsqueda
+    if (searchQuery) {
+      filtered = filtered.filter(
+        (user) =>
+          user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          user.email.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Filtrar por rol
+    if (filterRole !== 'all') {
+      filtered = filtered.filter((user) => user.role === filterRole);
+    }
+
+    setFilteredUsers(filtered);
+  };
+
+  const handleBlockUser = async (user) => {
+    const updatedUsers = users.map((u) =>
+      u.id === user.id ? { ...u, blocked: !u.blocked } : u
+    );
+    setUsers(updatedUsers);
+    await AsyncStorage.setItem('manospy_users_db_v1', JSON.stringify(updatedUsers));
+    Alert.alert(
+      'Éxito',
+      user.blocked ? `${user.name} desbloqueado` : `${user.name} bloqueado`
+    );
+  };
+
+  const handleDeleteUser = (user) => {
+    Alert.alert(
+      'Eliminar Usuario',
+      `¿Estás seguro de que deseas eliminar a ${user.name}?`,
+      [
+        { text: 'Cancelar', onPress: () => {} },
+        {
+          text: 'Eliminar',
+          onPress: async () => {
+            const updatedUsers = users.filter((u) => u.id !== user.id);
+            setUsers(updatedUsers);
+            await AsyncStorage.setItem('manospy_users_db_v1', JSON.stringify(updatedUsers));
+            Alert.alert('Éxito', `${user.name} eliminado`);
+          },
+        },
+      ]
+    );
+  };
+
+  const openEditModal = (user) => {
+    setSelectedUser(user);
+    setEditData({
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      city: user.city,
+    });
+    setEditModalVisible(true);
+  };
+
+  const handleSaveEdit = async () => {
+    const updatedUsers = users.map((u) =>
+      u.id === selectedUser.id
+        ? {
+            ...u,
+            name: editData.name,
+            email: editData.email,
+            phone: editData.phone,
+            city: editData.city,
+          }
+        : u
+    );
+    setUsers(updatedUsers);
+    await AsyncStorage.setItem('manospy_users_db_v1', JSON.stringify(updatedUsers));
+    setEditModalVisible(false);
+    Alert.alert('Éxito', 'Usuario actualizado correctamente');
+  };
+
+  const renderUserItem = ({ item }) => (
+    <Card style={styles.userCard}>
+      <View style={styles.userHeader}>
+        <View style={styles.userAvatar}>
+          <Text style={styles.avatarText}>
+            {item.name
+              .split(' ')
+              .map((n) => n[0])
+              .join('')
+              .toUpperCase()}
+          </Text>
+        </View>
+        <View style={styles.userInfo}>
+          <Text style={styles.userName}>{item.name}</Text>
+          <Text style={styles.userEmail}>{item.email}</Text>
+          <View style={styles.badges}>
+            <Badge variant={item.role === 'professional' ? 'success' : 'default'}>
+              {item.role === 'professional' ? 'Profesional' : 'Cliente'}
+            </Badge>
+            {item.blocked && <Badge variant="danger">Bloqueado</Badge>}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => handleBlockUser(item)}
+        >
+          <Ionicons
+            name={item.blocked ? 'lock-open' : 'lock-closed'}
+            size={18}
+            color={item.blocked ? COLORS.success : COLORS.warning}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => openEditModal(item)}
+        >
+          <Ionicons name="create" size={18} color={COLORS.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => handleDeleteUser(item)}
+        >
+          <Ionicons name="trash" size={18} color={COLORS.danger} />
+        </TouchableOpacity>
+      </View>
+    </Card>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Usuarios</Text>
+          <Text style={styles.subtitle}>Gestión de usuarios del sistema</Text>
+        </View>
+
+        <View style={styles.searchSection}>
+          <View style={styles.searchInput}>
+            <Ionicons name="search" size={20} color={COLORS.textMuted} />
+            <TextInput
+              placeholder="Buscar usuario..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={styles.input}
+              placeholderTextColor={COLORS.textMuted}
+            />
+            {searchQuery ? (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close" size={20} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.filterSection}>
+          <TouchableOpacity
+            style={[
+              styles.filterBtn,
+              filterRole === 'all' && styles.filterBtnActive,
+            ]}
+            onPress={() => setFilterRole('all')}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filterRole === 'all' && styles.filterTextActive,
+              ]}
+            >
+              Todos
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterBtn,
+              filterRole === 'client' && styles.filterBtnActive,
+            ]}
+            onPress={() => setFilterRole('client')}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filterRole === 'client' && styles.filterTextActive,
+              ]}
+            >
+              Clientes
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterBtn,
+              filterRole === 'professional' && styles.filterBtnActive,
+            ]}
+            onPress={() => setFilterRole('professional')}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filterRole === 'professional' && styles.filterTextActive,
+              ]}
+            >
+              Profesionales
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {filteredUsers.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="person-remove" size={48} color={COLORS.textMuted} />
+            <Text style={styles.emptyText}>No hay usuarios</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredUsers}
+            renderItem={renderUserItem}
+            keyExtractor={(item) => item.id.toString()}
+            scrollEnabled={false}
+          />
+        )}
+
+        <View style={{ height: SPACING.xl }} />
+      </ScrollView>
+
+      {/* Modal de Edición */}
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Editar Usuario</Text>
+              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                <Ionicons name="close" size={24} color={COLORS.text} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedUser && (
+              <ScrollView style={{ flex: 1 }}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Nombre</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={editData.name}
+                    onChangeText={(text) =>
+                      setEditData({ ...editData, name: text })
+                    }
+                    placeholder="Nombre completo"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Email</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={editData.email}
+                    onChangeText={(text) =>
+                      setEditData({ ...editData, email: text })
+                    }
+                    placeholder="correo@ejemplo.com"
+                    keyboardType="email-address"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Teléfono</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={editData.phone}
+                    onChangeText={(text) =>
+                      setEditData({ ...editData, phone: text })
+                    }
+                    placeholder="Teléfono"
+                    keyboardType="phone-pad"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Ciudad</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={editData.city}
+                    onChangeText={(text) =>
+                      setEditData({ ...editData, city: text })
+                    }
+                    placeholder="Ciudad"
+                  />
+                </View>
+
+                <Button
+                  title="Guardar Cambios"
+                  onPress={handleSaveEdit}
+                  style={styles.saveBtn}
+                />
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.background },
+  content: { flex: 1, padding: SPACING.lg },
+  header: { marginBottom: SPACING.xl },
+  title: { fontSize: 28, fontWeight: 'bold', color: COLORS.text, marginBottom: SPACING.sm },
+  subtitle: { fontSize: 14, color: COLORS.textMuted },
+  searchSection: { marginBottom: SPACING.lg },
+  searchInput: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, borderWidth: 1, borderColor: COLORS.border },
+  input: { flex: 1, paddingVertical: SPACING.md, paddingHorizontal: SPACING.sm, fontSize: 14, color: COLORS.text },
+  filterSection: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.lg },
+  filterBtn: { paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  filterBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterText: { fontSize: 13, color: COLORS.text, fontWeight: '600' },
+  filterTextActive: { color: '#fff' },
+  userCard: { marginBottom: SPACING.md },
+  userHeader: { flexDirection: 'row', marginBottom: SPACING.md },
+  userAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
+  avatarText: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  userInfo: { flex: 1 },
+  userName: { fontSize: 15, fontWeight: '600', color: COLORS.text },
+  userEmail: { fontSize: 12, color: COLORS.textMuted, marginTop: SPACING.xs },
+  badges: { flexDirection: 'row', gap: SPACING.xs, marginTop: SPACING.sm },
+  actions: { flexDirection: 'row', gap: SPACING.md },
+  actionBtn: { paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, backgroundColor: COLORS.background, borderRadius: RADIUS.md, alignItems: 'center' },
+  emptyState: { alignItems: 'center', paddingVertical: SPACING.xxl },
+  emptyText: { fontSize: 16, color: COLORS.textMuted, marginTop: SPACING.md },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: COLORS.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.lg, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg, paddingBottom: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.text },
+  inputGroup: { marginBottom: SPACING.lg },
+  label: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: SPACING.sm },
+  textInput: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, fontSize: 14, color: COLORS.text },
+  saveBtn: { marginTop: SPACING.lg, marginBottom: SPACING.lg },
+});

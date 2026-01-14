@@ -1,0 +1,469 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  FlatList,
+  Linking,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { COLORS, SPACING, RADIUS } from '../constants';
+import { Card, Badge, Button } from '../components/CommonComponents';
+
+const ProCard = ({
+  professional,
+  onValidate,
+  onReject,
+  isPending,
+}) => (
+  <Card style={styles.proCard}>
+    <View style={styles.cardHeader}>
+      <View style={styles.avatarSection}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {professional.name
+              .split(' ')
+              .map((n) => n[0])
+              .join('')
+              .toUpperCase()}
+          </Text>
+        </View>
+        <View style={styles.headerInfo}>
+          <Text style={styles.proName}>{professional.name}</Text>
+          <Text style={styles.proSpecialty}>{professional.specialty}</Text>
+        </View>
+      </View>
+      {isPending && <Badge variant="warning">Pendiente</Badge>}
+      {!isPending && <Badge variant="success">Verificado ✓</Badge>}
+    </View>
+
+    <View style={styles.detailsSection}>
+      <View style={styles.detail}>
+        <Ionicons name="mail" size={16} color={COLORS.textMuted} />
+        <Text style={styles.detailText}>{professional.email}</Text>
+      </View>
+      <View style={styles.detail}>
+        <Ionicons name="call" size={16} color={COLORS.textMuted} />
+        <Text style={styles.detailText}>{professional.phone}</Text>
+      </View>
+      <View style={styles.detail}>
+        <Ionicons name="location" size={16} color={COLORS.textMuted} />
+        <Text style={styles.detailText}>{professional.city}</Text>
+      </View>
+      {professional.createdAt && (
+        <View style={styles.detail}>
+          <Ionicons name="calendar" size={16} color={COLORS.textMuted} />
+          <Text style={styles.detailText}>
+            {new Date(professional.createdAt).toLocaleDateString('es-PY')}
+          </Text>
+        </View>
+      )}
+    </View>
+
+    {isPending && (
+      <View style={styles.actionsSection}>
+        <Button
+          title="✓ Validar"
+          onPress={() => onValidate(professional)}
+          style={[styles.actionBtn, { backgroundColor: COLORS.success }]}
+        />
+        <Button
+          title="✗ Rechazar"
+          onPress={() => onReject(professional)}
+          variant="danger"
+          style={styles.actionBtn}
+        />
+        <TouchableOpacity
+          style={styles.whatsappBtn}
+          onPress={() => {
+            const message = encodeURIComponent(
+              `Hola ${professional.name}, Te contacto respecto a tu registro en ManosPy.`
+            );
+            Linking.openURL(`https://wa.me/${professional.phone}?text=${message}`);
+          }}
+        >
+          <Ionicons name="logo-whatsapp" size={20} color="#fff" />
+          <Text style={styles.whatsappText}>WhatsApp</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+  </Card>
+);
+
+export default function AdminProfessionalValidation() {
+  const [professionals, setProfessionals] = useState([]);
+  const [pending, setPending] = useState([]);
+  const [verified, setVerified] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadProfessionals();
+  }, []);
+
+  const loadProfessionals = async () => {
+    try {
+      // Primero intentar sincronizar con servidor
+      try {
+        console.log('📡 Intentando cargar profesionales del servidor...');
+        const serverResponse = await fetch('http://localhost:5555/api/sync/users');
+        if (serverResponse.ok) {
+          const serverData = await serverResponse.json();
+          if (serverData.ok && serverData.data) {
+            console.log('✅ Datos obtenidos del servidor:', serverData.data.length, 'usuarios');
+            // Guardar en AsyncStorage local
+            await AsyncStorage.setItem('manospy_users_db_v1', JSON.stringify(serverData.data));
+          }
+        }
+      } catch (serverError) {
+        console.warn('⚠️ No se pudo conectar al servidor, usando datos locales:', serverError.message);
+      }
+
+      // Cargar desde AsyncStorage (local o sincronizado)
+      const data = await AsyncStorage.getItem('manospy_users_db_v1');
+      if (data) {
+        const allUsers = JSON.parse(data);
+        const pros = allUsers.filter((u) => u.role === 'professional');
+        setProfessionals(pros);
+
+        const pendingPros = pros.filter((p) => !p.verified);
+        const verifiedPros = pros.filter((p) => p.verified);
+
+        setPending(pendingPros);
+        setVerified(verifiedPros);
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading professionals:', error);
+      setLoading(false);
+    }
+  };
+
+  const handleValidate = async (professional) => {
+    console.log('🔵 handleValidate iniciado para:', professional.name);
+    
+    // Usar Alert.alert para compatibilidad móvil
+    Alert.alert(
+      'Validar Profesional',
+      `¿Deseas validar a ${professional.name}?`,
+      [
+        { text: 'Cancelar', onPress: () => console.log('❌ Cancelado'), style: 'cancel' },
+        { 
+          text: 'Sí, validar', 
+          onPress: async () => {
+            try {
+              console.log('📝 Iniciando validación de:', professional.name);
+              
+              // CREAR EL USUARIO VALIDADO
+              const validatedUser = {
+                ...professional,
+                verified: true,
+                updatedAt: new Date().toISOString(),
+              };
+              console.log('✍️ Usuario validado creado:', validatedUser);
+
+              // ACTUALIZAR EN ASYNCSTORAGE LOCAL
+              const allData = await AsyncStorage.getItem('manospy_users_db_v1');
+              console.log('📦 Datos actuales en AsyncStorage:', allData ? JSON.parse(allData).length + ' usuarios' : 'vacío');
+              
+              const allUsers = JSON.parse(allData || '[]');
+              const updatedUsers = allUsers.map((u) =>
+                u.id === professional.id ? validatedUser : u
+              );
+              console.log('🔄 Usuarios actualizados:', updatedUsers.length);
+              
+              await AsyncStorage.setItem(
+                'manospy_users_db_v1',
+                JSON.stringify(updatedUsers)
+              );
+              console.log('✅ Profesional validado en AsyncStorage:', professional.name);
+
+              // SINCRONIZAR CON SERVIDOR
+              try {
+                console.log('📤 Sincronizando validación con servidor...');
+                const serverResponse = await fetch('http://localhost:5555/api/sync/user', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(validatedUser),
+                });
+                const serverData = await serverResponse.json();
+                console.log('✅ Sincronizado con servidor:', serverData.message);
+              } catch (serverError) {
+                console.warn('⚠️ No se pudo sincronizar con servidor:', serverError.message);
+              }
+
+              // ACTUALIZAR UI
+              const proFiltrados = updatedUsers.filter((u) => u.role === 'professional');
+              const pendFiltrados = proFiltrados.filter((p) => !p.verified);
+              const veriFiltrados = proFiltrados.filter((p) => p.verified);
+              
+              console.log('📊 UI Update - Profesionales:', proFiltrados.length, 'Pendientes:', pendFiltrados.length, 'Verificados:', veriFiltrados.length);
+              
+              setProfessionals(proFiltrados);
+              setPending(pendFiltrados);
+              setVerified(veriFiltrados);
+              
+              console.log('🎉 UI actualizado correctamente');
+
+              Alert.alert('✅ Éxito', `${professional.name} ha sido validado. Ya puede iniciar sesión.`);
+            } catch (error) {
+              console.error('❌ Error al validar:', error);
+              Alert.alert('❌ Error', `Error al validar: ${error.message}`);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleReject = async (professional) => {
+    alert(
+      'Rechazar Profesional',
+      `¿Estás seguro de que deseas rechazar a ${professional.name}?`,
+      [
+        { text: 'Cancelar', onPress: () => {} },
+        {
+          text: 'Rechazar',
+          onPress: async () => {
+            try {
+              const allData = await AsyncStorage.getItem('manospy_users_db_v1');
+              const allUsers = JSON.parse(allData);
+
+              const updatedUsers = allUsers.filter((u) => u.id !== professional.id);
+
+              await AsyncStorage.setItem(
+                'manospy_users_db_v1',
+                JSON.stringify(updatedUsers)
+              );
+
+              setProfessionals(updatedUsers.filter((u) => u.role === 'professional'));
+              setPending(
+                updatedUsers.filter(
+                  (u) => u.role === 'professional' && !u.verified
+                )
+              );
+              setVerified(
+                updatedUsers.filter((u) => u.role === 'professional' && u.verified)
+              );
+
+              alert('Rechazado', `${professional.name} ha sido rechazado`);
+            } catch (error) {
+              alert('Error', 'Error al rechazar el profesional');
+              console.error('Error:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Ionicons name="checkmark-circle" size={32} color={COLORS.primary} />
+          <Text style={styles.title}>Validación de Profesionales</Text>
+          <Text style={styles.subtitle}>Aprueba o rechaza solicitudes</Text>
+        </View>
+
+        {/* Sección Pendientes */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="hourglass" size={24} color="#FF9500" />
+            <Text style={styles.sectionTitle}>
+              Pendientes de Validación ({pending.length})
+            </Text>
+          </View>
+
+          {pending.length === 0 ? (
+            <View style={styles.emptySection}>
+              <Ionicons name="checkmark-done" size={48} color={COLORS.success} />
+              <Text style={styles.emptyText}>Todos validados ✓</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={pending}
+              renderItem={({ item }) => (
+                <ProCard
+                  professional={item}
+                  onValidate={handleValidate}
+                  onReject={handleReject}
+                  isPending={true}
+                />
+              )}
+              keyExtractor={(item) => item.id.toString()}
+              scrollEnabled={false}
+            />
+          )}
+        </View>
+
+        {/* Sección Verificados */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="checkmark-circle" size={24} color={COLORS.success} />
+            <Text style={styles.sectionTitle}>
+              Profesionales Verificados ({verified.length})
+            </Text>
+          </View>
+
+          {verified.length === 0 ? (
+            <View style={styles.emptySection}>
+              <Ionicons name="person-remove" size={48} color={COLORS.textMuted} />
+              <Text style={styles.emptyText}>Sin profesionales verificados</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={verified}
+              renderItem={({ item }) => (
+                <ProCard
+                  professional={item}
+                  onValidate={handleValidate}
+                  onReject={handleReject}
+                  isPending={false}
+                />
+              )}
+              keyExtractor={(item) => item.id.toString()}
+              scrollEnabled={false}
+            />
+          )}
+        </View>
+
+        <View style={{ height: SPACING.xl }} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  content: {
+    flex: 1,
+    padding: SPACING.lg,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: SPACING.xl,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginTop: SPACING.md,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    marginTop: SPACING.xs,
+  },
+  section: {
+    marginBottom: SPACING.xl,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+    paddingBottom: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginLeft: SPACING.md,
+  },
+  proCard: {
+    marginBottom: SPACING.lg,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.lg,
+    paddingBottom: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  avatarSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  proName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  proSpecialty: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginTop: SPACING.xs,
+  },
+  detailsSection: {
+    marginBottom: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  detail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  detailText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  actionsSection: {
+    gap: SPACING.sm,
+  },
+  actionBtn: {
+    marginBottom: SPACING.sm,
+  },
+  whatsappBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#25D366',
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    gap: SPACING.sm,
+  },
+  whatsappText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  emptySection: {
+    alignItems: 'center',
+    paddingVertical: SPACING.xxl,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: COLORS.textMuted,
+    marginTop: SPACING.md,
+  },
+});
+
